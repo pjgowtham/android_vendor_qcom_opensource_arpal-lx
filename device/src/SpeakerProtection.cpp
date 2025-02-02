@@ -1069,6 +1069,29 @@ exit:
 
 int SpeakerProtection::spkrStartCalibration()
 {
+    int status = 0;
+    uint32_t r0_left = 0, r0_right = 0;
+    uint32_t f0_left = 0, f0_right = 0;
+
+    if (tfa98xx) {
+        // Get R0 values
+        status = tfa98xx->getR0(r0_left, r0_right);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to get R0 values");
+            return status;
+        }
+
+        // Get F0 values
+        status = tfa98xx->getF0(f0_left, f0_right);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to get F0 values");
+            return status;
+        }
+
+        PAL_INFO(LOG_TAG, "R0 values - Left: %u, Right: %u", r0_left, r0_right);
+        PAL_INFO(LOG_TAG, "F0 values - Left: %u, Right: %u", f0_left, f0_right);
+    }
+
     FILE *fp;
     struct pal_device device, deviceRx;
     struct pal_channel_info ch_info;
@@ -1079,7 +1102,7 @@ int SpeakerProtection::spkrStartCalibration()
     struct agm_event_reg_cfg event_cfg;
     struct agmMetaData deviceMetaData(nullptr, 0);
     struct mixer_ctl *beMetaDataMixerCtrl = nullptr;
-    int ret = 0, status = 0, dir = 0, i = 0, flags = 0, payload_size = 0, spkViMap, spkDevMap;
+    int ret = 0, dir = 0, i = 0, flags = 0, payload_size = 0, spkViMap, spkDevMap;
     uint32_t miid = 0;
     char mSndDeviceName_rx[128] = {0};
     char mSndDeviceName_vi[128] = {0};
@@ -2173,10 +2196,21 @@ error_exit:
 
 exit:
     PAL_DBG(LOG_TAG, "exit. calThrdCreated :%d for device: %d", calThrdCreated, device->id);
+
+    // Initialize Tfa98xx if it's the right device type
+    if (device->id == PAL_DEVICE_OUT_SPEAKER) {
+        tfa98xx = std::make_unique<Tfa98xx>();
+        if (!tfa98xx->initialize()) {
+            PAL_ERR(LOG_TAG, "Failed to initialize TFA98xx");
+        }
+    }
 }
 
 SpeakerProtection::~SpeakerProtection()
 {
+    // Tfa98xx will be automatically cleaned up by unique_ptr
+    tfa98xx.reset();
+    
     if (spkerTempList)
         delete[] spkerTempList;
 
@@ -3519,7 +3553,6 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
     std::vector<Stream*> activeStreams;
     PayloadBuilder* builder = new PayloadBuilder();
     std::unique_lock<std::mutex> lock(calibrationMutex);
-
     PAL_DBG(LOG_TAG, "Flag %d", flag);
     deviceMutex.lock();
 
@@ -3635,6 +3668,18 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
                 spModeConfg.operation_mode = NORMAL_MODE;
         }
 
+        beMetaDataMixerCtrl = mixer_get_ctl_by_name(hwMixer, "TFA Calibration");
+        if (!beMetaDataMixerCtrl) {
+            PAL_ERR(LOG_TAG, "Invalid mixer control: %s\n", "TFA Calibration");
+            ret = -ENOENT;
+            return ret;
+        }
+
+        ret = mixer_ctl_get_value(beMetaDataMixerCtrl, 0);
+        PAL_DBG(LOG_TAG, "Value for TFA Calibration Left Mixer control %d", ret);
+        ret = mixer_ctl_get_value(beMetaDataMixerCtrl, 1);
+        PAL_DBG(LOG_TAG, "Value for TFA Calibration Right Mixer control %d", ret);
+
         payloadSize = 0;
         builder->payloadSPConfig(&payload, &payloadSize, miid,
                 PARAM_ID_SP_OP_MODE,(void *)&spModeConfg);
@@ -3650,6 +3695,25 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
                 PAL_ERR(LOG_TAG," updateCustomPayload Failed\n");
             }
         }
+
+        beMetaDataMixerCtrl = mixer_get_ctl_by_name(hwMixer, "SP MIID");
+        if (!beMetaDataMixerCtrl) {
+            PAL_ERR(LOG_TAG, "Invalid mixer control: %s\n", "SP MIID");
+            ret = -ENOENT;
+            return ret;
+        }
+        ret = mixer_ctl_get_value(beMetaDataMixerCtrl, 0);
+        PAL_DBG(LOG_TAG, "Value for TFA SP MIID Mixer control %d", ret);
+        ret = mixer_ctl_set_value(beMetaDataMixerCtrl, 0, miid);
+        
+        beMetaDataMixerCtrl = mixer_get_ctl_by_name(hwMixer, "SP PCMID");
+        if (!beMetaDataMixerCtrl) {
+            PAL_ERR(LOG_TAG, "Invalid mixer control: %s\n", "SP PCMID");
+            ret = -ENOENT;
+            return ret;
+        }
+        ret = mixer_ctl_get_value(beMetaDataMixerCtrl, 0);
+        PAL_DBG(LOG_TAG, "Value for TFA SP PCMID Mixer control %d", ret);
 
         /* CPS configures speaker payload so need to retain it in processing mode.
          * */
@@ -3842,10 +3906,22 @@ int SpeakerProtection::stop()
 
 int32_t SpeakerProtection::setParameter(uint32_t param_id, void *param)
 {
-    PAL_DBG(LOG_TAG, "Inside Speaker Protection Set parameters");
-    (void ) param;
-    if (param_id == PAL_SP_MODE_DYNAMIC_CAL)
-        speakerProtectionDynamicCal();
+    switch (param_id) {
+        case PAL_SP_MODE_DYNAMIC_CAL:
+            speakerProtectionDynamicCal();
+            break;
+            
+        case PAL_SP_SET_VOLUME:
+            if (tfa98xx && param) {
+                uint8_t volume = *static_cast<uint8_t*>(param);
+                tfa98xx->setVolume(volume);
+            }
+            break;
+            
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported param_id %u", param_id);
+            return -EINVAL;
+    }
     return 0;
 }
 

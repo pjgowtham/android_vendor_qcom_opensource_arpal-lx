@@ -38,6 +38,7 @@
 #include "Device.h"
 #include "ResourceManager.h"
 #include "PalCommon.h"
+
 class Stream;
 
 /*

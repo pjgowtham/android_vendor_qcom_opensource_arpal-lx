@@ -41,6 +41,7 @@
 #include<vector>
 #include "apm_api.h"
 #include "ResourceManager.h"
+#include "Tfa98xx.h"
 
 class Device;
 
@@ -52,6 +53,8 @@ class Device;
 
 #define CPS_WSA_VBATT_LOWER_THRESHOLD_1 168
 #define CPS_WSA_VBATT_LOWER_THRESHOLD_2 148
+
+#define PAL_SP_SET_VOLUME 0x0800119E  // Choose a unique ID that doesn't conflict with existing ones
 
 typedef enum speaker_prot_cal_state {
     SPKR_NOT_CALIBRATED,     /* Speaker not calibrated  */
@@ -119,6 +122,7 @@ protected :
 private :
     static bool isSharedBE;
     int populateSpDevInfoCreateCalThread(struct pal_device *device);
+    std::unique_ptr<Tfa98xx> tfa98xx;
 
 public:
     static std::thread mCalThread;

@@ -3021,7 +3021,7 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
             PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
             goto exit;
         }
-
+        PAL_DBG(LOG_TAG, "sattr->type = %d", sattr->type);
         switch (sattr->type) {
             case PAL_STREAM_VOICE_UI:
                 PAL_INFO(LOG_TAG,"channels %d, id %d\n",dAttr.config.ch_info.channels, dAttr.id);

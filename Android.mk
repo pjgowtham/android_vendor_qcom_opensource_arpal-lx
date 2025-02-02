@@ -112,6 +112,7 @@ LOCAL_SRC_FILES := \
     device/src/FMDevice.cpp \
     device/src/ExtEC.cpp \
     device/src/HapticsDev.cpp \
+    device/src/Tfa98xx.cpp \
     device/src/UltrasoundDevice.cpp \
     session/src/Session.cpp \
     session/src/PayloadBuilder.cpp \
