@@ -880,21 +880,12 @@ int32_t pal_stream_set_buffer_size (pal_stream_handle_t *stream_handle,
 
     PAL_DBG(LOG_TAG, "Enter. Stream handle :%pK", stream_handle);
     s =  reinterpret_cast<Stream *>(stream_handle);
-    status = rm->increaseStreamUserCounter(s);
-    if (0 != status) {
-        rm->unlockValidStreamMutex();
-        PAL_ERR(LOG_TAG, "failed to increase stream user count");
-        return status;
-    }
     rm->unlockValidStreamMutex();
 
     status = s->setBufInfo(in_buffer_cfg, out_buffer_cfg);
     if (0 != status) {
         PAL_ERR(LOG_TAG, "pal_stream_set_buffer_size failed with status %d", status);
     }
-    rm->lockValidStreamMutex();
-    rm->decreaseStreamUserCounter(s);
-    rm->unlockValidStreamMutex();
     PAL_DBG(LOG_TAG, "Exit. status %d", status);
     return status;
 }

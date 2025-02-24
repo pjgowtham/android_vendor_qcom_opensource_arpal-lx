@@ -257,7 +257,7 @@ int SessionAlsaPcm::setConfig(Stream * s, configType type, uint32_t tag1,
     const char *setParamTagControl = "setParamTag";
     struct mixer_ctl *ctl = nullptr;
     uint32_t tkv_size = 0;
-    PAL_DBG(LOG_TAG, "Enter tags: %d %d %d", tag1, tag2, tag3);
+    PAL_DBG(LOG_TAG, "Enter tags: 0x%x 0x%x 0x%x", tag1, tag2, tag3);
     switch (type) {
         case MODULE:
             tkv.clear();
@@ -475,7 +475,7 @@ int SessionAlsaPcm::setConfig(Stream * s, configType type, int tag)
                                      txAifBackEnds[0].second.data() : rxAifBackEnds[0].second.data());
     }
 
-    PAL_DBG(LOG_TAG, "Enter tag: %d", tag);
+    PAL_DBG(LOG_TAG, "Enter tag: 0x%x", tag);
     switch (type) {
         case MODULE:
             tkv.clear();

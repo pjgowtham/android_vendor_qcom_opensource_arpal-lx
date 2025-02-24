@@ -42,6 +42,7 @@
 #include "apm_api.h"
 #include "ResourceManager.h"
 
+class SpeakerProtectionTfa98xx;
 class Device;
 
 #define LPASS_WR_CMD_REG_PHY_ADDR 0x3250300
@@ -115,6 +116,7 @@ protected :
     struct spDeviceInfo spDevInfo;
     void *viCustomPayload;
     size_t viCustomPayloadSize;
+    std::unique_ptr<SpeakerProtectionTfa98xx> tfa98xx;
 
 private :
     static bool isSharedBE;

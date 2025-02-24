@@ -35,6 +35,7 @@
 #include "PalAudioRoute.h"
 #include "ResourceManager.h"
 #include "SessionAlsaUtils.h"
+#include "SpeakerProtectionTfa98xx.h"
 #include "kvh2xml.h"
 #include <agm/agm_api.h>
 
@@ -2152,6 +2153,10 @@ SpeakerProtection::SpeakerProtection(struct pal_device *device,
         PAL_ERR(LOG_TAG,"hw mixer error %d", status);
     }
 
+    if (SpeakerProtectionTfa98xx::isTfaDevicePresent(hwMixer)) {
+        tfa98xx = std::make_unique<SpeakerProtectionTfa98xx>();
+    }
+
     fp = fopen(PAL_SP_TEMP_PATH, "rb");
     if (fp) {
         PAL_DBG(LOG_TAG, "Cal File exists. Reading from it");
@@ -3037,6 +3042,7 @@ int SpeakerProtection::viTxSetupThreadLoop()
     struct pal_stream_attributes sAttr;
     struct pcm_config config;
     struct mixer_ctl *connectCtrl = NULL;
+    struct mixer_ctl *mixerCtl = NULL;
     struct audio_route *audioRoute = NULL;
     struct vi_r0t0_cfg_t r0t0Array[numberOfChannels];
     struct agmMetaData deviceMetaData(nullptr, 0);
@@ -3259,12 +3265,18 @@ int SpeakerProtection::viTxSetupThreadLoop()
         }
         modeConfg.th_quick_calib_flag = 0;
 
-        ret = SessionAlsaUtils::getModuleInstanceId(virtMixer, pcmDevIdTx.at(0),
+        mixerCtl = mixer_get_ctl_by_name(hwMixer, "SP MIID");
+        if (mixerCtl) {
+            miid = mixer_ctl_get_value(mixerCtl, 0);
+            PAL_DBG(LOG_TAG, "Got VI module miid %d from mixer control", miid);
+        } else {
+            ret = SessionAlsaUtils::getModuleInstanceId(virtMixer, pcmDevIdTx.at(0),
                         backEndName.c_str(), MODULE_VI, &miid);
-        if (ret != 0) {
-            PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_VI,
-                                                            ret);
-            goto free_fe;
+            if (ret != 0) {
+                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_VI,
+                    ret);
+                goto free_fe;
+            }
         }
 
         viCustomPayloadSize = 0;
@@ -3814,6 +3826,8 @@ int SpeakerProtection::start()
     else {
         if (ResourceManager::isSpeakerHandsetProtectionSeparate)
             spkrProtProcessingModeV2(true);
+        else if (tfa98xx)
+            tfa98xx->spkrProtProcessingMode(true);
         else
             spkrProtProcessingMode(true);
     }
@@ -3834,6 +3848,8 @@ int SpeakerProtection::stop()
     }
     if (ResourceManager::isSpeakerHandsetProtectionSeparate)
         spkrProtProcessingModeV2(false);
+    else if (tfa98xx)
+        tfa98xx->spkrProtProcessingMode(false);
     else
         spkrProtProcessingMode(false);
     return 0;
