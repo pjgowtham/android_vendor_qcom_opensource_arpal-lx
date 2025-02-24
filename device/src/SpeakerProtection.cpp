@@ -2152,6 +2152,10 @@ SpeakerProtection::SpeakerProtection(struct pal_device *device,
         PAL_ERR(LOG_TAG,"hw mixer error %d", status);
     }
 
+    if (SpeakerProtectionTfa98xx::isTfaDevicePresent(hwMixer)) {
+        tfa98xx = std::make_unique<SpeakerProtectionTfa98xx>();
+    }
+
     fp = fopen(PAL_SP_TEMP_PATH, "rb");
     if (fp) {
         PAL_DBG(LOG_TAG, "Cal File exists. Reading from it");
@@ -3037,6 +3041,7 @@ int SpeakerProtection::viTxSetupThreadLoop()
     struct pal_stream_attributes sAttr;
     struct pcm_config config;
     struct mixer_ctl *connectCtrl = NULL;
+    struct mixer_ctl *mixerCtl = NULL;
     struct audio_route *audioRoute = NULL;
     struct vi_r0t0_cfg_t r0t0Array[numberOfChannels];
     struct agmMetaData deviceMetaData(nullptr, 0);
@@ -3259,12 +3264,18 @@ int SpeakerProtection::viTxSetupThreadLoop()
         }
         modeConfg.th_quick_calib_flag = 0;
 
-        ret = SessionAlsaUtils::getModuleInstanceId(virtMixer, pcmDevIdTx.at(0),
+        mixerCtl = mixer_get_ctl_by_name(hwMixer, "SP MIID");
+        if (mixerCtl) {
+            miid = mixer_ctl_get_value(mixerCtl, 0);
+            PAL_DBG(LOG_TAG, "Got VI module miid %d from mixer control", miid);
+        } else {
+            ret = SessionAlsaUtils::getModuleInstanceId(virtMixer, pcmDevIdTx.at(0),
                         backEndName.c_str(), MODULE_VI, &miid);
-        if (ret != 0) {
-            PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_VI,
-                                                            ret);
-            goto free_fe;
+            if (ret != 0) {
+                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_VI,
+                    ret);
+                goto free_fe;
+            }
         }
 
         viCustomPayloadSize = 0;
@@ -3363,8 +3374,8 @@ int SpeakerProtection::viTxSetupThreadLoop()
             }
         }
 
-        // Setting the R0T0 values
         PAL_DBG(LOG_TAG, "Read R0T0 from file");
+        // Setting the R0T0 values
         fp = fopen(PAL_SP_TEMP_PATH, "rb");
         if (fp) {
             for (int i = 0; i < numberOfChannels; i++) {
@@ -3498,6 +3509,7 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
     uint8_t* payload = NULL;
     uint32_t devicePropId[] = {0x08000010, 1, 0x2};
     uint32_t miid = 0;
+    uint32_t pcmId = 0;
     bool isTxFeandBeConnected = true;
     size_t payloadSize = 0;
     struct pal_device device;
@@ -3619,7 +3631,16 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
             PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", MODULE_SP, ret);
             goto exit;
         }
+        pcmId = rm->getActiveStreamPcmId();
 
+        if (tfa98xx) {
+            ret = tfa98xx->sendPcmIdAndMiidToDriver(miid, pcmId);
+            if (ret) {
+                PAL_ERR(LOG_TAG, "Failed to send PCM ID %d and MIID to driver", pcmId);
+                goto exit;
+            }
+            tfa98xx->payloadSPConfig(&payload, &payloadSize, miid);
+        } else {
         // Set the operation mode for SP module
         PAL_DBG(LOG_TAG, "Operation mode for SP %d",
                         rm->mSpkrProtModeValue.operationMode);
@@ -3638,6 +3659,7 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
         payloadSize = 0;
         builder->payloadSPConfig(&payload, &payloadSize, miid,
                 PARAM_ID_SP_OP_MODE,(void *)&spModeConfg);
+        }
         if (payloadSize) {
             if (customPayload) {
                 free (customPayload);
