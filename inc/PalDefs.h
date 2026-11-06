@@ -1019,6 +1019,7 @@ typedef enum {
     PAL_PARAM_ID_ST_CAPTURE_INFO = 75,
     PAL_PARAM_ID_RESOURCES_AVAILABLE = 76,
     PAL_PARAM_ID_HAPTICS_MODE = 77,
+    PAL_PARAM_ID_LVACFS = 1001,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
